@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WartezeitTracker">
+<title>WartezeitTracker – Europa-Park</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg:#0f0f1a; --bg2:#1a1a2e; --bg3:#242440; --surface:#1e1e35;
+  --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.15);
+  --text:#f0f0f8; --text2:#9999bb; --text3:#5555aa;
+  --accent:#7c6ff7; --accent2:#a89cff;
+  --green:#4caf6e; --red:#ef5350; --amber:#ffb74d;
+}
+html,body { height:100%; background:var(--bg); color:var(--text); font-family:-apple-system,'SF Pro Display',system-ui,sans-serif; font-size:16px; line-height:1.5; overflow:hidden; }
+.app { height:100dvh; display:flex; flex-direction:column; max-width:430px; margin:0 auto; position:relative; overflow:hidden; }
+
+/* Header */
+.header { background:var(--bg2); padding:env(safe-area-inset-top,16px) 18px 14px; padding-top:max(env(safe-area-inset-top,0px),16px); border-bottom:0.5px solid var(--border); flex-shrink:0; }
+.header-row { display:flex; align-items:center; justify-content:space-between; }
+.header-title { font-size:18px; font-weight:600; letter-spacing:-0.5px; }
+.header-title span { color:var(--accent2); }
+.live-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 8px; border-radius:20px; border:0.5px solid; }
+.live-badge.on  { background:rgba(76,175,110,0.15); border-color:rgba(76,175,110,0.3); color:#6dd68e; }
+.live-badge.off { background:rgba(255,183,77,0.12); border-color:rgba(255,183,77,0.3); color:#ffca80; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+.park-chip { display:inline-flex; align-items:center; gap:6px; background:rgba(124,111,247,0.15); border:0.5px solid rgba(124,111,247,0.3); border-radius:20px; padding:4px 10px; font-size:12px; color:var(--accent2); margin-top:8px; }
+.park-chip::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--green); flex-shrink:0; }
+.refresh-btn { background:none; border:none; color:var(--text2); font-size:18px; cursor:pointer; padding:4px 6px; border-radius:8px; line-height:1; transition:transform 0.3s; }
+.refresh-btn:active { transform:rotate(180deg); }
+.refresh-btn.spinning { animation: spin 0.7s linear; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Screens */
+.screen { display:none; flex:1; overflow:hidden; flex-direction:column; }
+.screen.active { display:flex; }
+
+/* Screen 1 */
+.search-wrap { padding:12px 16px 0; flex-shrink:0; }
+.search-input { width:100%; padding:10px 14px; background:var(--surface); border:0.5px solid var(--border2); border-radius:12px; color:var(--text); font-size:15px; outline:none; -webkit-appearance:none; }
+.search-input::placeholder { color:var(--text3); }
+.search-input:focus { border-color:var(--accent); }
+.filter-row { display:flex; gap:7px; padding:10px 16px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
+.filter-row::-webkit-scrollbar { display:none; }
+.ftab { padding:5px 13px; border-radius:20px; font-size:13px; font-weight:500; border:0.5px solid var(--border2); background:var(--surface); color:var(--text2); cursor:pointer; white-space:nowrap; flex-shrink:0; -webkit-user-select:none; }
+.ftab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.ftab.sr-tab { background:rgba(255,183,77,0.1); border-color:rgba(255,183,77,0.3); color:#ffca80; }
+.ftab.sr-tab.active { background:#ffb74d; color:#1a1a1a; border-color:#ffb74d; }
+.ride-card.sr-card { border-color:rgba(255,183,77,0.2); background:rgba(255,183,77,0.04); }
+.sr-badge { font-size:10px; font-weight:600; background:rgba(255,183,77,0.2); color:#ffca80; padding:2px 6px; border-radius:4px; margin-top:3px; display:inline-block; }
+.rides-scroll { flex:1; overflow-y:auto; padding:0 16px 16px; -webkit-overflow-scrolling:touch; }
+.ride-card { background:var(--surface); border-radius:14px; border:0.5px solid var(--border); padding:13px 15px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; cursor:pointer; transition:border-color 0.15s; -webkit-user-select:none; }
+.ride-card:active { background:var(--bg3); border-color:var(--accent); }
+.ride-info { flex:1; min-width:0; margin-right:10px; }
+.ride-name { font-size:15px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ride-cat  { font-size:12px; color:var(--text3); margin-top:2px; }
+.wait-pill { font-size:13px; font-weight:600; padding:4px 10px; border-radius:8px; flex-shrink:0; }
+.wlow  { background:rgba(76,175,110,0.15);  color:#6dd68e; }
+.wmid  { background:rgba(255,183,77,0.15);  color:#ffca80; }
+.whigh { background:rgba(239,83,80,0.15);   color:#ff7875; }
+.wna   { background:var(--bg3); color:var(--text3); }
+.wlive { background:rgba(100,160,255,0.15); color:#7ab8ff; }
+
+/* Screen 2 */
+.confirm-body { flex:1; overflow-y:auto; padding:20px 18px; -webkit-overflow-scrolling:touch; }
+.big-name { font-size:24px; font-weight:700; letter-spacing:-0.5px; margin-bottom:4px; }
+.big-sub  { font-size:13px; color:var(--text3); margin-bottom:22px; }
+.info-card { background:var(--surface); border-radius:16px; border:0.5px solid var(--border); padding:16px 18px; margin-bottom:12px; }
+.info-card-label { font-size:11px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:var(--text3); margin-bottom:10px; }
+.wait-api-row { display:flex; align-items:center; justify-content:space-between; }
+.wait-num  { font-size:36px; font-weight:700; letter-spacing:-1px; color:var(--text); }
+.wait-unit { font-size:16px; font-weight:400; color:var(--text2); }
+.wait-src  { font-size:11px; color:var(--text3); margin-top:4px; }
+.divider   { height:0.5px; background:var(--border); margin:12px 0; }
+.manual-row { display:flex; align-items:center; gap:10px; }
+.manual-label { font-size:13px; color:var(--text2); flex:1; }
+.manual-input { width:70px; padding:7px 10px; background:var(--bg3); border:0.5px solid var(--border2); border-radius:10px; color:var(--text); font-size:16px; font-weight:600; text-align:center; outline:none; -webkit-appearance:none; }
+.manual-unit { font-size:13px; color:var(--text3); }
+.tip-box { background:rgba(124,111,247,0.08); border:0.5px solid rgba(124,111,247,0.2); border-radius:12px; padding:10px 14px; font-size:12px; color:var(--text2); margin-bottom:16px; }
+
+/* Screen 3 – Timer */
+.timer-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 20px; }
+.rec-indicator { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text2); margin-bottom:16px; }
+.rec-dot { width:9px; height:9px; border-radius:50%; background:var(--red); animation:pulse 1s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+.timer-digits { font-size:64px; font-weight:700; letter-spacing:-3px; font-variant-numeric:tabular-nums; font-family:'SF Mono','Courier New',monospace; color:var(--text); margin-bottom:4px; line-height:1; }
+.timer-sub { font-size:13px; color:var(--text3); margin-bottom:24px; }
+
+/* Timer info row */
+.timer-inforow { display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; margin-bottom:24px; }
+.timer-infocard { background:var(--surface); border-radius:12px; border:0.5px solid var(--border); padding:10px 12px; text-align:center; }
+.timer-infocard .tic-label { font-size:10px; color:var(--text3); margin-bottom:4px; }
+.timer-infocard .tic-val   { font-size:15px; font-weight:600; color:var(--text); }
+
+.progress-section { width:100%; margin-bottom:0; }
+.progress-top { display:flex; justify-content:space-between; font-size:12px; color:var(--text2); margin-bottom:6px; }
+.prog-bar  { height:8px; background:var(--bg3); border-radius:4px; overflow:hidden; }
+.prog-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:4px; transition:width 0.9s linear; }
+
+/* Screen 4 – Ergebnis */
+.result-body { flex:1; overflow-y:auto; padding:20px 18px; -webkit-overflow-scrolling:touch; }
+.result-header { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+.result-icon { width:48px; height:48px; border-radius:50%; background:rgba(76,175,110,0.15); display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+.result-title { font-size:20px; font-weight:700; letter-spacing:-0.3px; }
+.result-sub   { font-size:12px; color:var(--text3); margin-top:2px; }
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+.stat-card  { background:var(--surface); border-radius:14px; border:0.5px solid var(--border); padding:14px; }
+.stat-label { font-size:11px; color:var(--text3); margin-bottom:6px; font-weight:500; }
+.stat-val   { font-size:26px; font-weight:700; letter-spacing:-1px; line-height:1; }
+.stat-unit  { font-size:12px; color:var(--text2); font-weight:400; margin-top:3px; }
+.diff-card  { background:var(--surface); border-radius:14px; border:0.5px solid var(--border); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.diff-label { font-size:13px; color:var(--text2); }
+.diff-val   { font-size:15px; font-weight:600; }
+.dbetter { color:var(--green); }
+.dworse  { color:var(--red); }
+.dequal  { color:var(--text2); }
+.log-title { font-size:11px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:var(--text3); margin-bottom:8px; }
+.log-table { width:100%; border-collapse:collapse; font-size:12px; }
+.log-table th { text-align:left; color:var(--text3); font-weight:500; padding:4px 6px; border-bottom:0.5px solid var(--border); font-size:11px; }
+.log-table th:last-child,.log-table td:last-child { text-align:right; }
+.log-table td { padding:8px 6px; border-bottom:0.5px solid rgba(255,255,255,0.04); color:var(--text); }
+.log-table tr:last-child td { border-bottom:none; }
+
+/* Buttons */
+.btn-wrap { padding:12px 16px; padding-bottom:max(env(safe-area-inset-bottom,0px),12px); flex-shrink:0; display:flex; flex-direction:column; gap:8px; }
+.btn { width:100%; padding:15px; border-radius:14px; border:none; font-size:16px; font-weight:600; cursor:pointer; text-align:center; -webkit-user-select:none; transition:opacity 0.15s,transform 0.1s; }
+.btn:active { opacity:0.8; transform:scale(0.98); }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-danger  { background:var(--red); color:#fff; }
+.btn-ghost   { background:var(--surface); border:0.5px solid var(--border2); color:var(--text2); font-size:14px; }
+.btn-export  { background:var(--surface); border:0.5px solid var(--border2); color:var(--text); font-size:14px; }
+.btn-del     { background:rgba(239,83,80,0.1); border:0.5px solid rgba(239,83,80,0.3); color:#ff7875; font-size:14px; }
+
+.empty { text-align:center; padding:40px 0; color:var(--text3); font-size:14px; }
+
+/* Edit modal */
+.edit-field { margin-bottom:14px; }
+.subride-row { display:flex; gap:8px; }
+.subride-btn { flex:1; padding:9px; border-radius:12px; border:0.5px solid var(--border2); background:var(--surface); color:var(--text2); font-size:14px; font-weight:600; cursor:pointer; text-align:center; transition:all 0.15s; }
+.subride-btn.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+.edit-label { font-size:11px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:var(--text3); margin-bottom:8px; display:block; }
+.edit-toggle-row { display:flex; gap:10px; }
+.edit-toggle { flex:1; padding:10px; border-radius:12px; border:0.5px solid var(--border2); background:var(--surface); color:var(--text2); font-size:14px; font-weight:600; cursor:pointer; text-align:center; transition:all 0.15s; }
+.edit-toggle.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+.edit-number-row { display:flex; align-items:center; gap:10px; }
+.edit-num-btn { width:36px; height:36px; border-radius:10px; border:0.5px solid var(--border2); background:var(--surface); color:var(--text); font-size:20px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.edit-num-val { flex:1; text-align:center; font-size:22px; font-weight:700; color:var(--text); }
+.edit-note { width:100%; padding:10px 12px; background:var(--surface); border:0.5px solid var(--border2); border-radius:12px; color:var(--text); font-size:14px; outline:none; resize:none; font-family:inherit; }
+.edit-note::placeholder { color:var(--text3); }
+.log-row-edit { font-size:11px; color:var(--accent2); margin-top:2px; }
+
+/* Modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:flex-end; justify-content:center; z-index:100; padding:0 0 max(env(safe-area-inset-bottom,0px),16px); }
+.modal-overlay.hidden { display:none; }
+.hidden { display:none !important; }
+.modal-box { background:var(--bg2); border-radius:20px 20px 0 0; border:0.5px solid var(--border2); padding:24px 20px 8px; width:100%; max-width:430px; }
+.modal-title { font-size:17px; font-weight:700; margin-bottom:8px; }
+.modal-desc  { font-size:14px; color:var(--text2); margin-bottom:20px; line-height:1.5; }
+.modal-btn-row { display:flex; flex-direction:column; gap:8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-row">
+      <div class="header-title">Wartezeit<span>Tracker v0.16</span></div>
+      <div class="live-badge off" id="live-badge"><div class="live-dot"></div><span id="live-label">Demo</span></div>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+      <div class="park-chip">Europa-Park · Rust</div>
+      <a href="https://www.wartezeiten.app/europa-park/" target="_blank" style="font-size:10px; color:var(--text3); text-decoration:none; margin-top:4px; display:inline-block;">Live-Daten: wartezeiten.app ↗</a>
+      <button class="refresh-btn" id="refresh-btn" onclick="refreshLive()" title="Wartezeiten aktualisieren">↻</button>
+    </div>
+  </div>
+
+  <!-- Screen 1: Auswahl -->
+  <div class="screen active" id="s-select">
+    <div class="search-wrap">
+      <input class="search-input" type="search" placeholder="Attraktion suchen…" id="search" oninput="render()">
+    </div>
+    <div class="filter-row">
+      <div class="ftab active" onclick="setFilter('alle',this)">Alle</div>
+      <div class="ftab" onclick="setFilter('achterbahn',this)">Achterbahn</div>
+      <div class="ftab" onclick="setFilter('dark',this)">Dark Ride</div>
+      <div class="ftab" onclick="setFilter('wasser',this)">Wasser</div>
+      <div class="ftab" onclick="setFilter('familie',this)">Familie</div>
+    </div>
+    <div class="rides-scroll" id="rides-list"></div>
+  </div>
+
+  <!-- Screen 2: Bestätigen -->
+  <div class="screen" id="s-confirm">
+    <div class="confirm-body">
+      <div class="big-name" id="c-name">–</div>
+      <div class="big-sub">Europa-Park</div>
+      <div class="info-card">
+        <div class="info-card-label">Angezeigte Wartezeit</div>
+        <div class="wait-api-row">
+          <div>
+            <div class="wait-num"><span id="c-wait">–</span> <span class="wait-unit">min</span></div>
+            <div class="wait-src" id="c-src">–</div>
+          </div>
+          <div class="wait-pill wmid" id="c-badge">–</div>
+        </div>
+        <div class="divider"></div>
+        <div class="manual-row">
+          <span class="manual-label">Manuell korrigieren:</span>
+          <input class="manual-input" type="number" id="manual" min="0" max="300">
+          <span class="manual-unit">min</span>
+        </div>
+      </div>
+      <div class="tip-box">💡 Schau auf das Schild am Eingang und passe die Zeit falls nötig an.</div>
+    </div>
+    <div class="btn-wrap">
+      <button class="btn btn-primary" onclick="startTimer()">▶ Messung starten</button>
+      <button class="btn btn-ghost" onclick="go('s-select')">← Andere Attraktion</button>
+    </div>
+  </div>
+
+  <!-- Screen 3: Timer -->
+  <div class="screen" id="s-timer">
+    <div class="timer-body">
+      <div class="rec-indicator">
+        <div class="rec-dot"></div>
+        <span id="t-ride">–</span>
+      </div>
+
+      <div class="timer-digits" id="t-display">00:00:00</div>
+      <div class="timer-sub">Verstrichene Wartezeit</div>
+
+      <div class="timer-inforow">
+        <div class="timer-infocard">
+          <div class="tic-label">Angestellt um</div>
+          <div class="tic-val" id="t-starttime">–</div>
+        </div>
+        <div class="timer-infocard">
+          <div class="tic-label">Voraus. Fahrzeit</div>
+          <div class="tic-val" id="t-eta">–</div>
+        </div>
+      </div>
+
+      <div class="progress-section">
+        <div class="progress-top">
+          <span>Fortschritt</span>
+          <span id="t-pct">0 %</span>
+        </div>
+        <div class="prog-bar">
+          <div class="prog-fill" id="t-fill" style="width:0%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:5px;">
+          <span>0</span><span id="t-stated">– min angegeben</span>
+        </div>
+      </div>
+    </div>
+    <div class="btn-wrap">
+      <button class="btn btn-danger" onclick="stopTimer()">■ Stopp – Ich bin dran!</button>
+      <button class="btn btn-ghost" onclick="askCancel()">Abbrechen (nicht speichern)</button>
+    </div>
+  </div>
+
+  <!-- Screen 4: Ergebnis -->
+  <div class="screen" id="s-result">
+    <div class="result-body">
+      <div class="result-header">
+        <div class="result-icon">✓</div>
+        <div>
+          <div class="result-title" id="r-ride">–</div>
+          <div class="result-sub">Europa-Park · heute</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Gemessen</div>
+          <div class="stat-val" id="r-measured">–</div>
+          <div class="stat-unit">min : sek</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Angegeben</div>
+          <div class="stat-val" id="r-stated">–</div>
+          <div class="stat-unit">Minuten</div>
+        </div>
+      </div>
+      <div class="diff-card">
+        <span class="diff-label">Abweichung</span>
+        <span class="diff-val" id="r-diff">–</span>
+      </div>
+      <div id="log-wrap"></div>
+    </div>
+    <div class="btn-wrap">
+      <button class="btn btn-export" onclick="copyText()">⎘ Kopieren (<span id="log-count">0</span> Einträge)</button>
+      <button class="btn btn-primary" onclick="go('s-select')">+ Nächste Attraktion</button>
+      <button class="btn btn-del" onclick="askDelete()">🗑 Alle Fahrten löschen</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: Messvorgang wiederherstellen -->
+<div class="modal-overlay hidden" id="modal-recover">
+  <div class="modal-box">
+    <div class="modal-title">Letzten Messvorgang fortsetzen?</div>
+    <div class="modal-desc" id="recover-desc">–</div>
+    <div class="modal-btn-row">
+      <button class="btn btn-primary" onclick="recoverTimer()">Fortsetzen</button>
+      <button class="btn btn-ghost"   onclick="discardRecover()">Verwerfen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Eintrag bearbeiten -->
+<div class="modal-overlay hidden" id="modal-edit">
+  <div class="modal-box">
+    <div class="modal-title" id="edit-title">Eintrag bearbeiten</div>
+
+    <div class="edit-field hidden" id="subride-field">
+      <span class="edit-label" id="subride-label">Bahn</span>
+      <div class="subride-row" id="subride-row"></div>
+    </div>
+
+    <div class="edit-field" id="sr-field">
+      <span class="edit-label">Single Rider</span>
+      <div class="edit-toggle-row">
+        <div class="edit-toggle" id="tog-sr" onclick="toggleSR()">Single Rider genutzt</div>
+      </div>
+    </div>
+
+    <div class="edit-field" id="vq-field">
+      <span class="edit-label">Virtual Queue</span>
+      <div class="edit-toggle-row">
+        <div class="edit-toggle" id="tog-vq" onclick="toggleVQ()">Virtual Queue genutzt</div>
+      </div>
+    </div>
+
+    <div class="edit-field">
+      <span class="edit-label">Reihe</span>
+      <div class="edit-number-row">
+        <button class="edit-num-btn" onclick="changeRow(-1)">−</button>
+        <div class="edit-num-val" id="edit-row-val">–</div>
+        <button class="edit-num-btn" onclick="changeRow(1)">+</button>
+      </div>
+    </div>
+
+    <div class="edit-field">
+      <span class="edit-label">Notiz</span>
+      <textarea class="edit-note" id="edit-note" rows="2" placeholder="z.B. Reihe links, Gewitter…"></textarea>
+    </div>
+
+    <div class="modal-btn-row">
+      <button class="btn btn-primary" onclick="saveEdit()">Speichern</button>
+      <button class="btn btn-ghost"   onclick="closeModalEdit()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Abbrechen bestätigen -->
+<div class="modal-overlay hidden" id="modal-cancel">
+  <div class="modal-box">
+    <div class="modal-title">Messung abbrechen?</div>
+    <div class="modal-desc">Die aktuelle Messung wird nicht gespeichert.</div>
+    <div class="modal-btn-row">
+      <button class="btn btn-danger"  onclick="confirmCancel()">Ja, abbrechen</button>
+      <button class="btn btn-primary" onclick="closeModalCancel()">Weiter messen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Löschen bestätigen -->
+<div class="modal-overlay hidden" id="modal-delete">
+  <div class="modal-box">
+    <div class="modal-title">Alle Fahrten löschen?</div>
+    <div class="modal-desc">Du hast <span id="modal-count">0</span> Messungen gespeichert. Möchtest du diese vorher als CSV exportieren?</div>
+    <div class="modal-btn-row">
+      <button class="btn btn-export" onclick="exportThenDelete()">↓ Exportieren & löschen</button>
+      <button class="btn btn-del"    onclick="confirmDelete()">Löschen ohne Export</button>
+      <button class="btn btn-ghost"  onclick="closeModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Attraktionen ──
+// Attraktionen mit mehreren Bahnen
+// Attraktionen mit Single-Rider-Option
+const SR_RIDES = [];
+
+const SUBRIDES = {};
+
+const RIDES = [
+  // Achterbahn
+  {name:"Voltron Nevera powered by Rimac", cat:"achterbahn", wait:50, uuid:"38d87d15-5698-4a67-b61f-1eb51301a1ce"},
+  {name:"WODAN - Timburcoaster",           cat:"achterbahn", wait:40, uuid:"14077dfa-4f29-4ce0-b1cb-2818fc13731f"},
+  {name:"blue fire Megacoaster",           cat:"achterbahn", wait:35, uuid:"1c08cec3-4b66-400f-8a09-c78ac8894df8"},
+  {name:"Silver Star",                     cat:"achterbahn", wait:35, uuid:"064d3073-4f2d-4435-a08f-97a58eb6b479"},
+  {name:"Eurosat - CanCan Coaster",        cat:"achterbahn", wait:30, uuid:"3a4f40bb-cb03-451c-9b75-8f0dfbffa50d"},
+  {name:"Matterhorn-Blitz",                cat:"achterbahn", wait:25, uuid:"2ef267ca-265c-48d4-a7eb-444f7c2e66dd"},
+  {name:"Schweizer Bobbahn",               cat:"achterbahn", wait:25, uuid:"4ffaf347-517f-4171-805e-50c1549acb6f"},
+  {name:"Pegasus - Die YoungStar Achterbahn", cat:"achterbahn", wait:15, uuid:"c7457473-9022-42d3-948a-48978bbd69fd"},
+  // Wasser
+  {name:"Atlantica SuperSplash",           cat:"achterbahn", wait:25, uuid:"99f31e77-c0da-43f1-b2c9-2b2fd86a1e2c"},
+  {name:"Wasserachterbahn Poseidon",       cat:"achterbahn", wait:20, uuid:"0b9af61a-069c-4669-9c01-ae3fa81910f4"},
+  {name:"Fjord Rafting",                   cat:"wasser",     wait:20, uuid:"a29ec124-c679-43a8-bde5-fd33f2846a8c"},
+  {name:"Tiroler Wildwasserbahn",          cat:"wasser",     wait:10, uuid:"968152e6-6e04-4580-bc06-3fb468561152"},
+  {name:"Whale Adventures - Northern Lights", cat:"wasser",  wait:10, uuid:"96bf0abf-13e9-4ff1-b007-1a703e801b51"},
+  // Dark Ride / Indoor
+  {name:"ARTHUR",                          cat:"achterbahn", wait:40, uuid:"75d9c4bd-649d-45c7-bc41-3914ee4619b5"},
+  {name:"Voletarium",                      cat:"dark",       wait:35, uuid:"f557353d-2de3-41a9-b1d5-fde66112e365"},
+  {name:"Piraten in Batavia",              cat:"dark",       wait:20, uuid:"92665061-02fa-41ab-9841-f26c8a90005c"},
+  {name:"Euro-Mir",                        cat:"achterbahn", wait:25, uuid:"64975d7d-d659-401c-b3c7-b698fb482f73"},
+  {name:"Jim Knopf - Reise durch Lummerland", cat:"dark",   wait:15, uuid:"93819596-5e98-45f4-a0ad-38500698a121"},
+  {name:"Madame Freudenreich Curiosités",  cat:"dark",       wait:10, uuid:"58a85d0c-c1ba-4726-bb05-99c05ec25f3b"},
+  {name:"Abenteuer Atlantis",              cat:"dark",       wait:10, uuid:"160d1636-7f55-4435-aac7-5132deb79497"},
+  {name:"Castello dei Medici",             cat:"dark",       wait:5,  uuid:"fcaa64e8-a5d0-447e-a355-8654409a816f"},
+  {name:"Snorri Touren",                   cat:"dark",       wait:10, uuid:"62c71e4b-63c2-442f-ab60-80bcf09a32f2"},
+  // Familie / Sonstige
+  {name:"Alpenexpress \"Enzian\"",         cat:"achterbahn", wait:15, uuid:"c83bda4c-a946-41d0-be13-ed6ba63e8988"},
+  {name:"Euro-Tower",                      cat:"familie",    wait:10, uuid:"865f7779-3470-448e-ac4d-075b310e78bd"},
+  {name:"Volo da Vinci",                   cat:"familie",    wait:15, uuid:"a9b06296-202f-4761-b2af-050737008530"},
+  {name:"Ba-a-a Express",                  cat:"achterbahn", wait:20, uuid:"4f7230a6-f91a-457c-8bb1-c42604860238"},
+  {name:"Vindjammer",                      cat:"familie",    wait:5,  uuid:"3835653a-d5fb-4739-8953-5063a5164628"},
+  {name:"Kolumbusjolle",                   cat:"familie",    wait:5,  uuid:"12276d52-d566-4923-8afb-75c326d57587"},
+  {name:"Arena of Football - Be Part of It!", cat:"familie", wait:5,  uuid:"d2c4f5f5-4b5f-45c3-946e-5d3f3cedecbe"},
+  {name:"Poppy Towers",                    cat:"familie",    wait:5,  uuid:"d180dd2e-8254-4846-81a7-6cf315dc865a"},
+  {name:"Old Mac Donald's Tractor Fun",    cat:"familie",    wait:5,  uuid:"690bc4ae-bd81-4b59-952e-e95aac3502e6"},
+  {name:"Josefinas kaiserliche Zauberreise", cat:"familie",  wait:5,  uuid:"c55634ff-6798-40d7-bc9f-4ec3a4e7697d"},
+  {name:"Dancing Dingie",                  cat:"familie",    wait:5,  uuid:"1d854740-cf78-430f-a955-5c9d4274dc34"},
+  {name:"Wiener Wellenflieger - Glückspilz", cat:"familie",  wait:5,  uuid:"c0a5c175-70d2-4417-a333-8a6e74a08b59"},
+  {name:"GRAND PRIX EDventure",            cat:"familie",    wait:10, uuid:"b8ffd762-6461-4c03-a570-25cc12669cd0"},
+];
+
+const CATS = {achterbahn:"Achterbahn", dark:"Dark Ride / Indoor", wasser:"Wasserfahrt", familie:"Familie", sr:"Single Rider"};
+
+// Live-Wartezeiten per CORS-Proxy von wartezeiten.app (Europa-Park)
+let liveWaits = {};       // name → Minuten
+let liveWaitsByUuid = {}; // uuid → Minuten
+let liveLoaded = false;
+
+async function fetchLive() {
+  const badge = document.getElementById('live-badge');
+  const label = document.getElementById('live-label');
+  try {
+    const proxy = 'https://repulsor1--ac3123d8c93c11f193781607ee4eb77e.web.val.run';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(proxy, {signal: controller.signal});
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rides = await res.json();
+    // wartezeiten.app returns a flat array
+    rides.forEach(r => {
+      const val = r.status === 'opened' ? r.waitingtime : -1;
+      if (r.name) liveWaits[r.name] = val;
+      if (r.uuid) liveWaitsByUuid[r.uuid] = val;
+    });
+    liveLoaded = Object.keys(liveWaits).length > 0;
+    if (liveLoaded) {
+      badge.className = 'live-badge on';
+      label.textContent = 'Live';
+    } else {
+      throw new Error('Keine Rides in Antwort');
+    }
+    render();
+  } catch(e) {
+    console.log('Live-Daten nicht verfügbar:', e.message);
+    liveLoaded = false;
+    badge.className = 'live-badge off';
+    label.textContent = 'Demo';
+  }
+}
+
+function getWait(name) {
+  if (liveLoaded) {
+    if (liveWaits[name] != null) {
+      const v = liveWaits[name];
+      return {val: v < 0 ? 0 : v, live: v >= 0, closed: v < 0};
+    }
+    // Fallback: UUID-Lookup (z.B. wenn API typografische Apostrophe liefert)
+    const r = RIDES.find(x => x.name === name);
+    if (r && r.uuid && liveWaitsByUuid[r.uuid] != null) {
+      const v = liveWaitsByUuid[r.uuid];
+      return {val: v < 0 ? 0 : v, live: v >= 0, closed: v < 0};
+    }
+  }
+  const r = RIDES.find(x => x.name === name);
+  return {val: r ? r.wait : 0, live: false, closed: false};
+}
+
+// ── State ──
+let filter = 'alle', ride = null, statedMin = 0;
+let timerStart = null, timerInterval = null, elapsed = 0, startTimeStr = '';
+let log = JSON.parse(localStorage.getItem('wt_log') || '[]');
+
+function wClass(m){ return !m||m===0?'wna':m<=20?'wlow':m<=45?'wmid':'whigh'; }
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function render(){
+  const q = document.getElementById('search').value.toLowerCase();
+  const list = RIDES.filter(r=>(filter==='alle'||r.cat===filter||r.cat2===filter)&&r.name.toLowerCase().includes(q));
+  const el = document.getElementById('rides-list');
+  if(!list.length){ el.innerHTML='<div class="empty">Keine Attraktionen gefunden</div>'; return; }
+  el.innerHTML = list.map(r=>{
+    const w = getWait(r.name);
+    const cls = w.closed ? 'wna' : w.live ? 'wlive' : 'wna';
+    const label = w.closed ? 'Geschl.' : (w.live && w.val ? w.val+' min' : '–');
+    const safeName = r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const isSR = r.cat === 'sr';
+    return `<div class="ride-card${isSR?' sr-card':''}" onclick="pick('${safeName}',${w.val},${w.live})">
+      <div class="ride-info">
+        <div class="ride-name">${r.name}</div>
+        ${isSR ? '<span class="sr-badge">Single Rider</span>' : `<div class="ride-cat">${CATS[r.cat]}</div>`}
+      </div>
+      <div class="wait-pill ${cls}">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+function setFilter(f,el){
+  filter=f;
+  document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function pick(name, wait, live){
+  ride=name; statedMin=wait;
+  document.getElementById('c-name').textContent=name;
+  document.getElementById('c-wait').textContent=live&&wait?wait:'–';
+  document.getElementById('manual').value=live&&wait?wait:'';
+  const b=document.getElementById('c-badge');
+  b.className='wait-pill '+(live&&wait?'wlive':'wna');
+  b.textContent=live&&wait?wait+' min':'–';
+  document.getElementById('c-src').textContent=live?'Quelle: wartezeiten.app (Live ●)':'Keine Live-Daten – bitte manuell eingeben';
+  go('s-confirm');
+}
+
+function startTimer(){
+  const m=parseInt(document.getElementById('manual').value);
+  statedMin=isNaN(m)?statedMin:m;
+
+  const now = new Date();
+  startTimeStr = pad(now.getHours())+':'+pad(now.getMinutes())+' Uhr';
+  const etaDate = new Date(now.getTime() + statedMin*60*1000);
+  const etaStr = pad(etaDate.getHours())+':'+pad(etaDate.getMinutes())+' Uhr';
+
+  document.getElementById('t-ride').textContent=ride;
+  document.getElementById('t-stated').textContent=statedMin+' min angegeben';
+  document.getElementById('t-starttime').textContent=startTimeStr;
+  document.getElementById('t-eta').textContent=etaStr;
+
+  timerStart=Date.now(); elapsed=0;
+  localStorage.setItem('wt_active', JSON.stringify({
+    ride, statedMin, startTimeStr, timerStart
+  }));
+  go('s-timer');
+  timerInterval=setInterval(()=>{ elapsed=Math.floor((Date.now()-timerStart)/1000); tick(); },1000);
+}
+
+function tick(){
+  const h=Math.floor(elapsed/3600), m=Math.floor((elapsed%3600)/60), s=elapsed%60;
+  document.getElementById('t-display').textContent=pad(h)+':'+pad(m)+':'+pad(s);
+  const pct=statedMin>0?Math.min(100,Math.round(elapsed/(statedMin*60)*100)):0;
+  document.getElementById('t-fill').style.width=pct+'%';
+  document.getElementById('t-pct').textContent=pct+' %';
+}
+
+function stopTimer(){
+  clearInterval(timerInterval);
+  localStorage.removeItem('wt_active');
+  const ms=elapsed, mm=Math.floor(ms/60), ss=ms%60;
+  const diff=Math.round((ms-statedMin*60)/60);
+  const now=new Date();
+  const endTimeStr = pad(now.getHours())+':'+pad(now.getMinutes())+' Uhr';
+  log.push({
+    ts: new Date().toLocaleString('de-DE'),
+    startTime: startTimeStr,
+    endTime: endTimeStr,
+    ride, measuredS:ms, statedMin, diff
+  });
+  localStorage.setItem('wt_log', JSON.stringify(log));
+  document.getElementById('r-ride').textContent=ride;
+  document.getElementById('r-measured').textContent=mm+':'+pad(ss);
+  document.getElementById('r-stated').textContent=statedMin;
+  const dEl=document.getElementById('r-diff');
+  if(Math.abs(diff)<1){ dEl.textContent='Genau wie angegeben'; dEl.className='diff-val dequal'; }
+  else if(diff<0){ dEl.textContent=Math.abs(diff)+' min kürzer als angegeben ✓'; dEl.className='diff-val dbetter'; }
+  else { dEl.textContent=diff+' min länger als angegeben ✗'; dEl.className='diff-val dworse'; }
+  renderLog();
+  document.getElementById('log-count').textContent=log.length;
+  go('s-result');
+}
+
+function askCancel(){
+  document.getElementById('modal-cancel').classList.remove('hidden');
+}
+function closeModalCancel(){
+  document.getElementById('modal-cancel').classList.add('hidden');
+}
+function confirmCancel(){
+  clearInterval(timerInterval);
+  localStorage.removeItem('wt_active');
+  elapsed=0;
+  closeModalCancel();
+  go('s-select');
+}
+
+function renderLog(){
+  const w=document.getElementById('log-wrap');
+  if(!log.length){ w.innerHTML=''; return; }
+  const rows=log.map((e,i)=>{
+    const m=Math.floor(e.measuredS/60), s=e.measuredS%60;
+    const d=e.diff===0?'±0':e.diff>0?'+'+e.diff+'min':e.diff+'min';
+    const extras=[];
+    if(e.sr) extras.push('SR');
+    if(e.vq) extras.push('VQ');
+    if(e.subride) extras.push(e.subride);
+    if(e.row) extras.push('R'+e.row);
+    if(e.note) extras.push('"'+e.note+'"');
+    const extStr=extras.length?'<div class="log-row-edit">'+extras.join(' ')+'</div>':'<div class="log-row-edit" style="color:var(--text3)">✏️ tippen zum Bearbeiten</div>';
+    return `<tr onclick="openEdit(${i})" style="cursor:pointer"><td><div>${e.ride}</div>${extStr}</td><td>${e.startTime||'–'}</td><td>${m}:${pad(s)}</td><td>${e.statedMin}</td><td>${d}</td></tr>`;
+  }).join('');
+  w.innerHTML=`<div class="log-title">Heutige Messungen (${log.length})</div>
+  <table class="log-table">
+    <tr><th>Attraktion</th><th>Um</th><th>Gemessen</th><th>Ang.</th><th>Diff</th></tr>
+    ${rows}
+  </table>`;
+}
+
+function buildText(){
+  return log.map(e=>{
+    const endH = e.endTime ? e.endTime.replace(':','').replace(' Uhr','') : '–';
+    const measMin = Math.floor(e.measuredS/60);
+    const extras=[];
+    if(e.sr) extras.push('SR');
+    if(e.vq) extras.push('VQ');
+    if(e.subride) extras.push(e.subride);
+    if(e.row) extras.push('R'+e.row);
+    if(e.note) extras.push('"'+e.note+'"');
+    return e.ride+' '+endH+' '+measMin+'/'+e.statedMin+(extras.length?' '+extras.join(' '):'');
+  }).join('\n');
+}
+
+function copyText(){
+  if(!log.length){ alert('Noch keine Messungen gespeichert.'); return; }
+  const text = buildText();
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = document.querySelector('.btn-export');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ Kopiert!';
+    setTimeout(()=>{ btn.innerHTML = orig; }, 2000);
+  }).catch(()=>{
+    // Fallback für ältere iOS-Versionen
+    const ta = document.createElement('textarea');
+    ta.value = buildText();
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const btn = document.querySelector('.btn-export');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ Kopiert!';
+    setTimeout(()=>{ btn.innerHTML = orig; }, 2000);
+  });
+}
+
+// ── Löschen ──
+function askDelete(){
+  if(!log.length){ alert('Keine Messungen vorhanden.'); return; }
+  document.getElementById('modal-count').textContent=log.length;
+  document.getElementById('modal-delete').classList.remove('hidden');
+}
+function closeModal(){ document.getElementById('modal-delete').classList.add('hidden'); }
+function exportThenDelete(){ copyText(); setTimeout(confirmDelete, 500); }
+function confirmDelete(){
+  log=[];
+  localStorage.removeItem('wt_log');
+  renderLog();
+  document.getElementById('log-count').textContent=0;
+  closeModal();
+  go('s-select');
+}
+
+// ── Eintrag bearbeiten ──
+let editIndex = -1;
+let editSr = false, editVq = false, editRow = 0, editSubride = null;
+
+function openEdit(i) {
+  editIndex = i;
+  const e = log[i];
+  editSr = e.sr || false;
+  editVq = e.vq || false;
+  editRow = e.row || 0;
+  editSubride = e.subride || null;
+  document.getElementById('edit-title').textContent = e.ride;
+  document.getElementById('edit-row-val').textContent = editRow || '–';
+
+  // SR und VQ immer anzeigen
+  const togSr = document.getElementById('tog-sr');
+  if (togSr) togSr.className = 'edit-toggle' + (editSr ? ' on' : '');
+  const togVq = document.getElementById('tog-vq');
+  if (togVq) togVq.className = 'edit-toggle' + (editVq ? ' on' : '');
+  document.getElementById('edit-note').value = e.note || '';
+
+  // Subride field
+  const subrideField = document.getElementById('subride-field');
+  const subrideRow   = document.getElementById('subride-row');
+  const options = SUBRIDES[e.ride];
+  if (options) {
+    subrideField.classList.remove('hidden');
+    subrideRow.innerHTML = options.map(o =>
+      `<div class="subride-btn${editSubride===o?' on':''}" onclick="selectSubride('${o}')">${o}</div>`
+    ).join('');
+  } else {
+    subrideField.classList.add('hidden');
+    subrideRow.innerHTML = '';
+  }
+
+  document.getElementById('modal-edit').classList.remove('hidden');
+}
+
+function toggleSR() {
+  editSr = !editSr;
+  const togSr = document.getElementById('tog-sr');
+  if (togSr) togSr.className = 'edit-toggle' + (editSr ? ' on' : '');
+}
+
+function toggleVQ() {
+  editVq = !editVq;
+  const togVq = document.getElementById('tog-vq');
+  if (togVq) togVq.className = 'edit-toggle' + (editVq ? ' on' : '');
+}
+
+function selectSubride(val) {
+  editSubride = editSubride === val ? null : val;
+  document.querySelectorAll('.subride-btn').forEach(b => {
+    b.className = 'subride-btn' + (b.textContent === val && editSubride ? ' on' : '');
+  });
+}
+
+function changeRow(d) {
+  editRow = Math.max(0, editRow + d);
+  document.getElementById('edit-row-val').textContent = editRow || '–';
+}
+
+function saveEdit() {
+  if(editIndex < 0) return;
+  log[editIndex].sr      = editSr || false;
+  log[editIndex].vq      = editVq || false;
+  log[editIndex].row     = editRow || null;
+  log[editIndex].subride = editSubride || null;
+  log[editIndex].note    = document.getElementById('edit-note').value.trim() || null;
+  localStorage.setItem('wt_log', JSON.stringify(log));
+  renderLog();
+  closeModalEdit();
+}
+
+function closeModalEdit() {
+  document.getElementById('modal-edit').classList.add('hidden');
+}
+
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+async function refreshLive() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  liveWaits = {};
+  await fetchLive();
+  setTimeout(() => btn.classList.remove('spinning'), 700);
+}
+
+// ── Messvorgang wiederherstellen ──
+function checkRecover() {
+  const saved = localStorage.getItem('wt_active');
+  if (!saved) return;
+  const a = JSON.parse(saved);
+  const secondsAgo = Math.floor((Date.now() - a.timerStart) / 1000);
+  const minAgo = Math.floor(secondsAgo / 60);
+  const secAgo = secondsAgo % 60;
+  // Nur anbieten wenn weniger als 3 Stunden vergangen (sinnvolles Limit)
+  if (secondsAgo > 10800) { localStorage.removeItem('wt_active'); return; }
+  document.getElementById('recover-desc').innerHTML =
+    '<strong>' + a.ride + '</strong><br>Gestartet um ' + a.startTimeStr +
+    '<br>Verstrichene Zeit: ' + pad(Math.floor(minAgo/60)) + ':' + pad(minAgo%60) + ':' + pad(secAgo) +
+    '<br>Angegeben: ' + a.statedMin + ' min';
+  document.getElementById('modal-recover').classList.remove('hidden');
+}
+
+function recoverTimer() {
+  const saved = localStorage.getItem('wt_active');
+  if (!saved) return;
+  const a = JSON.parse(saved);
+  ride = a.ride;
+  statedMin = a.statedMin;
+  startTimeStr = a.startTimeStr;
+  timerStart = a.timerStart;
+  elapsed = Math.floor((Date.now() - timerStart) / 1000);
+
+  // Berechne voraussichtliche Fahrzeit neu
+  const etaDate = new Date(timerStart + statedMin * 60 * 1000);
+  const etaStr = pad(etaDate.getHours()) + ':' + pad(etaDate.getMinutes()) + ' Uhr';
+
+  document.getElementById('t-ride').textContent = ride;
+  document.getElementById('t-stated').textContent = statedMin + ' min angegeben';
+  document.getElementById('t-starttime').textContent = startTimeStr;
+  document.getElementById('t-eta').textContent = etaStr;
+
+  document.getElementById('modal-recover').classList.add('hidden');
+  go('s-timer');
+  timerInterval = setInterval(() => { elapsed = Math.floor((Date.now() - timerStart) / 1000); tick(); }, 1000);
+}
+
+function discardRecover() {
+  localStorage.removeItem('wt_active');
+  document.getElementById('modal-recover').classList.add('hidden');
+}
+
+// ── Init ──
+render();
+fetchLive();
+checkRecover(); // Versucht Live-Daten zu laden; fällt bei Fehler auf Demo zurück
+</script>
+</body>
+</html>
